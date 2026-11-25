@@ -35,7 +35,7 @@ npm run mobile:setup
 npm run mobile:android
 ```
 
-The GitHub Actions workflow builds a debug APK on pushes and publishes a downloadable APK artifact. Tag a release `v*` to attach the APK to a GitHub Release.
+Download the latest Android APK from [GitHub Releases](https://github.com/baldmartin5385-lab/ApexGrid/releases/latest/download/app-debug.apk). GitHub Actions also builds an APK artifact on every push; tag a release `v*` to attach the APK to a GitHub Release.
 
 Progress and preferences (theme, rolling/lights-out start, metric/imperial units, and synthesized engine tone) are stored in browser/Electron local storage and are not synced to a server. Use **Settings → Export Garage Data** to download a JSON backup, or import a valid ApexGrid garage/track JSON file.
 
