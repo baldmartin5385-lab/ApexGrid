@@ -35,10 +35,10 @@ npm run mobile:setup
 npm run mobile:android
 ```
 
-Download the latest Android APK from [GitHub Releases](https://github.com/baldmartin5385-lab/ApexGrid/releases/latest/download/app-debug.apk). GitHub Actions also builds an APK artifact on every push; tag a release `v*` to attach the APK to a GitHub Release.
+Download the latest Android APK from [GitHub Releases](https://github.com/baldmartin5385-lab/ApexGrid/releases/latest/download/app-debug.apk). GitHub Actions automatically builds the Android debug APK and release AAB plus Windows, macOS, and Linux desktop packages on every push to `main`. Version tags (`v*`) attach all packages to a GitHub Release. The Android AAB and desktop installers are not production-signed; signing credentials are intentionally not stored in the repository.
 
 Progress and preferences (theme, rolling/lights-out start, metric/imperial units, and synthesized engine tone) are stored in browser/Electron local storage and are not synced to a server. Use **Settings → Export Garage Data** to download a JSON backup, or import a valid ApexGrid garage/track JSON file.
 
 ## Current scope
 
-This is a functional foundation, not the complete production simulator. It currently has one spectator-only practice format and a six-car path-following AI field; editable race grids, advanced rival strategy, multi-series championships, 2.5D presentation, grid/sound-pack import, and signed production builds are not implemented. Android APKs are built by GitHub Actions; production signing remains machine-specific.
+This is a functional foundation, not the complete production simulator. It currently has one spectator-only practice format and a six-car path-following AI field; editable race grids, advanced rival strategy, multi-series championships, 2.5D presentation, grid/sound-pack import, and signed production builds are not implemented.
