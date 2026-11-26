@@ -79,11 +79,71 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  macos:
+    runs-on: macos-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build macOS package
+        run: npm run desktop:build:mac
+
+      - name: Upload macOS installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ApexGrid-macOS
+          path: release/*.dmg
+          if-no-files-found: error
+          retention-days: 30
+
+  ios-simulator:
+    runs-on: macos-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate iOS project
+        run: npm run mobile:ios:setup
+
+      - name: Build unsigned iOS Simulator app
+        run: xcodebuild -project ios/App/App.xcodeproj -scheme App -destination 'generic/platform=iOS Simulator' -configuration Debug -derivedDataPath ios/build CODE_SIGNING_ALLOWED=NO build
+
+      - name: Package simulator app
+        run: ditto -c -k --sequesterRsrc --keepParent ios/build/Build/Products/Debug-iphonesimulator/App.app ApexGrid-iOS-Simulator.zip
+
+      - name: Upload iOS Simulator artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ApexGrid-iOS-Simulator
+          path: ApexGrid-iOS-Simulator.zip
+          if-no-files-found: error
+          retention-days: 30
+
   publish-release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs:
       - android
       - windows
+      - macos
+      - ios-simulator
     runs-on: ubuntu-latest
     steps:
       - name: Download all platform packages

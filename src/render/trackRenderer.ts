@@ -1,43 +1,68 @@
-import { Application, Container, Graphics, Sprite, Texture, type Texture as TextureType } from "pixi.js";
+import { Application, Assets, Container, Graphics, Sprite, Texture } from "pixi.js";
 import { RACE_SERIES, type AIDriver } from "../domain/ai";
-import type { Point, Track } from "../domain/track";
+import { smoothTrackPoints, type Point, type Track } from "../domain/track";
+import { VEHICLES, VEHICLE_BY_ID } from "../domain/vehicles";
 import { WORLD } from "../domain/track";
 import { geoToTrackWorld, trackWorldToGeo } from "../engine/MapRouter";
 import { geoToScreen, screenToGeo, TileProvider, type MapCamera, type VisibleTile } from "../map/TileProvider";
 
+export interface EditorViewport {
+  zoom: number;
+  panX: number;
+  panY: number;
+}
+
 export class TrackRenderer {
   private readonly mapLayer = new Container();
+  private readonly backdrop = new Graphics();
   private readonly graphics = new Graphics();
   private readonly carLayer = new Container();
-  private readonly carSprites = new Map<string, Sprite>();
   private readonly vectorCars = new Map<string, Container>();
+  private readonly vehicleTextures = new Map<string, Texture>();
   private readonly tileSprites = new Map<string, Sprite>();
 
   constructor(
     private readonly app: Application,
-    private readonly carTextures: TextureType[],
     private readonly tileProvider = new TileProvider(),
     private readonly onTileError: (error: Error) => void = (error) => console.warn(error),
   ) {
-    if (carTextures.length === 0) throw new Error("ApexGrid car sprites could not be loaded.");
-    this.app.stage.addChild(this.mapLayer, this.graphics, this.carLayer);
+    this.app.stage.addChild(this.mapLayer, this.backdrop, this.graphics, this.carLayer);
   }
 
-  draw(track: Track, editorPoints?: Point[], aiDrivers: AIDriver[] = [], mapCamera?: MapCamera): void {
+  async loadVehicleTextures(): Promise<void> {
+    await Promise.all(VEHICLES.map(async (vehicle) => {
+      const texture = await Assets.load<Texture>(vehicle.spriteUrl);
+      this.vehicleTextures.set(vehicle.id, texture);
+    }));
+  }
+
+  draw(
+    track: Track,
+    editorPoints?: Point[],
+    aiDrivers: AIDriver[] = [],
+    mapCamera?: MapCamera,
+    editorViewport?: EditorViewport,
+    selectedWaypointIndex = -1,
+    spectatorFollow?: Point,
+    selectedSpectatorDriverId?: string | null,
+  ): void {
     const g = this.graphics;
     g.clear();
-    this.carSprites.forEach((sprite) => { sprite.visible = false; });
     this.vectorCars.forEach((car) => { car.visible = false; });
     if (mapCamera) this.updateMapTiles(mapCamera);
     else this.clearMapTiles();
-    const { scale, offsetX, offsetY } = this.viewport();
+    const points = editorPoints ?? track.points;
+    const closed = track.closed !== false;
+    const linePoints = smoothTrackPoints(points, closed, 6);
+    const { scale, offsetX, offsetY } = this.viewport(editorPoints ? undefined : linePoints);
     const p = (point: Point): Point => ({
       x: offsetX + point.x * scale,
       y: offsetY + point.y * scale,
     });
 
-    if (!mapCamera) this.drawBackdrop(g, scale, offsetX, offsetY);
-    const points = editorPoints ?? track.points;
+    this.backdrop.clear();
+    if (!mapCamera) this.drawBackdrop(this.backdrop, Boolean(track.backgroundImage));
+    const classic = document.documentElement.dataset.theme === "classic";
     const project = mapCamera && track.geoReference
       ? (point: Point) => {
           const geo = trackWorldToGeo(point, {
@@ -49,111 +74,97 @@ export class TrackRenderer {
         }
       : p;
     if (points.length > 1) {
-      this.drawPath(g, points, project, track.width * scale + 18, 0x26312f);
-      this.drawPath(g, points, project, track.width * scale, 0x555d5b);
-      this.drawPath(g, points, project, track.width * scale - 7, 0x343b3a);
-      this.drawPath(g, points, project, 2, 0xb9c0b9, 0.54);
-      if (!editorPoints && !mapCamera) this.drawCurbs(g, track, project, scale);
-      this.drawStartLine(g, points, project, track.width * scale);
-      if (editorPoints) this.drawEditorNodes(g, points, project);
+      this.drawPath(g, linePoints, project, track.width * scale + 18, classic ? 0x817866 : 0x26312f, 1, closed);
+      this.drawPath(g, linePoints, project, track.width * scale, classic ? 0x56574f : 0x555d5b, 1, closed);
+      this.drawPath(g, linePoints, project, track.width * scale - 7, classic ? 0x43463f : 0x343b3a, 1, closed);
+      this.drawPath(g, linePoints, project, 2, classic ? 0xe7dfcc : 0xb9c0b9, 0.7, closed);
+      if (!editorPoints && !mapCamera) this.drawCurbs(g, { ...track, points: linePoints }, project, scale);
+      if (closed) this.drawStartLine(g, linePoints, project, track.width * scale);
     }
+    if (editorPoints) this.drawEditorNodes(g, points, project, selectedWaypointIndex);
 
     if (!editorPoints) {
       for (const driver of aiDrivers) {
         const at = project(driver.car);
-        if (driver.series === "f1") {
-          let sprite = this.carSprites.get(driver.id);
-          if (!sprite) {
-            const texture = this.carTextures[driver.spriteIndex % this.carTextures.length];
-            sprite = new Sprite(texture);
-            sprite.anchor.set(0.5);
-            this.carSprites.set(driver.id, sprite);
-            this.carLayer.addChild(sprite);
-          }
-          sprite.position.set(at.x, at.y);
-          sprite.rotation = driver.car.heading + Math.PI / 2;
-          sprite.height = RACE_SERIES[driver.series].spriteLength * scale;
-          sprite.tint = driver.car.offTrack ? 0xff785e : driver.spriteTint;
-          sprite.visible = true;
-        } else {
-          let vectorCar = this.vectorCars.get(driver.id);
-          if (!vectorCar) {
-            vectorCar = this.createVectorCar(driver.series, driver.color);
-            this.vectorCars.set(driver.id, vectorCar);
-            this.carLayer.addChild(vectorCar);
-          }
-          vectorCar.position.set(at.x, at.y);
-          vectorCar.rotation = driver.car.heading;
-          vectorCar.scale.set(scale * RACE_SERIES[driver.series].spriteLength / 46);
-          vectorCar.alpha = driver.car.offTrack ? 0.65 : 1;
-          vectorCar.visible = true;
+        const key = `${driver.series}:${driver.id}`;
+        const selected = driver.id === selectedSpectatorDriverId;
+        let vectorCar = this.vectorCars.get(key);
+        if (!vectorCar) {
+          vectorCar = this.createVectorCar(driver);
+          this.vectorCars.set(key, vectorCar);
+          this.carLayer.addChild(vectorCar);
         }
+        vectorCar.position.set(at.x, at.y);
+        vectorCar.scale.set(scale * (selected ? 1.3 : 1));
+        vectorCar.rotation = driver.car.heading + Math.PI / 2;
+        vectorCar.alpha = driver.car.offTrack ? 0.65 : 1;
+        vectorCar.children[1].visible = selected;
+        vectorCar.visible = true;
+        if (selected) this.carLayer.setChildIndex(vectorCar, this.carLayer.children.length - 1);
       }
     }
-
+    const zoom = mapCamera ? 1 : editorViewport?.zoom ?? 1;
+    const panX = mapCamera ? 0 : editorViewport?.panX ?? 0;
+    const panY = mapCamera ? 0 : editorViewport?.panY ?? 0;
+    const followedPoint = spectatorFollow && !mapCamera && !editorPoints
+      ? p(spectatorFollow)
+      : null;
+    const transformOffsetX = followedPoint
+      ? this.app.screen.width / 2 - followedPoint.x * zoom + panX
+      : this.app.screen.width / 2 * (1 - zoom) + panX;
+    const transformOffsetY = followedPoint
+      ? this.app.screen.height / 2 - followedPoint.y * zoom + panY
+      : this.app.screen.height / 2 * (1 - zoom) + panY;
+    for (const layer of [this.graphics, this.carLayer]) {
+      layer.scale.set(zoom);
+      layer.position.set(transformOffsetX, transformOffsetY);
+    }
   }
 
-  private createVectorCar(series: AIDriver["series"], color: number): Container {
+  private createVectorCar(driver: AIDriver): Container {
     const car = new Container();
-    const shape = new Graphics();
-    const tireColor = 0x111315;
-    const glassColor = 0x222a30;
-    const formula = series === "f2" || series === "f3";
-
-    if (formula) {
-      shape.roundRect(-14, -12, 9, 7, 2).fill(tireColor);
-      shape.roundRect(8, -12, 9, 7, 2).fill(tireColor);
-      shape.roundRect(-14, 5, 9, 7, 2).fill(tireColor);
-      shape.roundRect(8, 5, 9, 7, 2).fill(tireColor);
-      shape.rect(17, -15, 3, 30).fill(color);
-      shape.rect(-18, -15, 4, 30).fill(color);
-      shape.poly(
-        [
-          21, 0, 15, -4, 8, -4, 2, -3, -6, -5, -15, -4, -19, 0,
-          -15, 4, -6, 5, 2, 3, 8, 4, 15, 4,
-        ],
-        true,
-      ).fill(color);
-      shape.ellipse(4, 0, 5, 3).fill(glassColor);
-      shape.circle(1, 0, 2).fill(0xe9e5d9);
-      shape.rect(18, -5, 2, 10).fill(0xe9e5d9);
+    const definition = VEHICLE_BY_ID.get(driver.vehicleId);
+    if (!definition) throw new Error(`Vehicle definition is missing: ${driver.vehicleId}`);
+    const targetLength = RACE_SERIES[driver.series].vehicleLength;
+    const shadow = new Graphics()
+      .roundRect(-targetLength * 0.6, -targetLength * 0.31, targetLength * 1.2, targetLength * 0.62, targetLength * 0.22)
+      .fill({ color: 0x080a0b, alpha: 0.42 });
+    const focusRing = new Graphics()
+      .circle(0, 0, targetLength * 0.76)
+      .stroke({ color: 0xffd36a, width: 2.5, alpha: 0.9 });
+    focusRing.visible = false;
+    car.addChild(shadow, focusRing);
+    const texture = this.vehicleTextures.get(definition.id);
+    if (texture) {
+      const sprite = new Sprite(texture);
+      sprite.anchor.set(0.5);
+      sprite.scale.set(targetLength / definition.spriteLengthPixels);
+      car.addChild(sprite);
     } else {
-      const prototype = series === "prototype";
-      const halfLength = prototype ? 27 : 22;
-      const halfWidth = prototype ? 9 : 11;
-      shape.roundRect(-halfLength + 3, -halfWidth - 3, 10, 7, 2).fill(tireColor);
-      shape.roundRect(halfLength - 13, -halfWidth - 3, 10, 7, 2).fill(tireColor);
-      shape.roundRect(-halfLength + 3, halfWidth - 4, 10, 7, 2).fill(tireColor);
-      shape.roundRect(halfLength - 13, halfWidth - 4, 10, 7, 2).fill(tireColor);
-      if (prototype) {
-        shape.poly(
-          [
-            27, 0, 20, -5, 8, -8, -8, -9, -18, -7, -25, -4,
-            -27, 0, -25, 4, -18, 7, -8, 9, 8, 8, 20, 5,
-          ],
-          true,
-        ).fill(color);
-        shape.ellipse(-4, 0, 10, 5).fill(glassColor);
-        shape.rect(-23, -10, 3, 20).fill(color);
-        shape.rect(23, -9, 3, 18).fill(color);
-      } else {
-        shape.poly(
-          [
-            23, 0, 18, -6, 10, -10, -8, -10, -17, -8, -22, -5,
-            -23, 0, -22, 5, -17, 8, -8, 10, 10, 10, 18, 6,
-          ],
-          true,
-        ).fill(color);
-        shape.roundRect(-7, -7, 12, 14, 5).fill(glassColor);
-        shape.rect(18, -12, 4, 24).fill(color);
-        shape.rect(-22, -12, 4, 24).fill(color);
-        shape.circle(20, -6, 1.5).fill(0xf4ead5);
-        shape.circle(20, 6, 1.5).fill(0xf4ead5);
-      }
+      const body = new Graphics()
+        .roundRect(-targetLength * 0.18, -targetLength * 0.5, targetLength * 0.36, targetLength, targetLength * 0.12)
+        .fill(driver.color)
+        .roundRect(-targetLength * 0.1, -targetLength * 0.12, targetLength * 0.2, targetLength * 0.3, targetLength * 0.06)
+        .fill(0x101419);
+      car.addChild(body);
     }
-
-    car.addChild(shape);
     return car;
+  }
+
+  private drawBackdrop(g: Graphics, hasImage: boolean): void {
+    const width = this.app.screen.width;
+    const height = this.app.screen.height;
+    const classic = document.documentElement.dataset.theme === "classic";
+    if (!hasImage) g.rect(0, 0, width, height).fill(classic ? 0xd8d0c0 : 0x121a19);
+    const step = 28;
+    const gridColor = classic ? 0x867c68 : 0x26312b;
+    const alpha = hasImage ? 0.18 : classic ? 0.32 : 0.38;
+    for (let x = 0; x <= width; x += step) {
+      g.moveTo(x, 0).lineTo(x, height).stroke({ color: gridColor, alpha, width: 1 });
+    }
+    for (let y = 0; y <= height; y += step) {
+      g.moveTo(0, y).lineTo(width, y).stroke({ color: gridColor, alpha, width: 1 });
+    }
   }
 
   toWorld(
@@ -161,6 +172,7 @@ export class TrackRenderer {
     clientY: number,
     mapCamera?: MapCamera,
     geoReference?: Track["geoReference"],
+    editorViewport?: EditorViewport,
   ): Point {
     const rect = this.app.canvas.getBoundingClientRect();
     if (mapCamera && geoReference) {
@@ -177,20 +189,94 @@ export class TrackRenderer {
       });
     }
     const { scale, offsetX, offsetY } = this.viewport();
+    const zoom = editorViewport?.zoom ?? 1;
+    const centerX = this.app.screen.width / 2;
+    const centerY = this.app.screen.height / 2;
+    const screenX = (clientX - rect.left - (editorViewport?.panX ?? 0) - centerX) / zoom + centerX;
+    const screenY = (clientY - rect.top - (editorViewport?.panY ?? 0) - centerY) / zoom + centerY;
     return {
-      x: Math.max(0, Math.min(WORLD.width, (clientX - rect.left - offsetX) / scale)),
-      y: Math.max(0, Math.min(WORLD.height, (clientY - rect.top - offsetY) / scale)),
+      x: (screenX - offsetX) / scale,
+      y: (screenY - offsetY) / scale,
     };
   }
 
-  private viewport(): { scale: number; offsetX: number; offsetY: number } {
+  toScreen(
+    point: Point,
+    mapCamera?: MapCamera,
+    geoReference?: Track["geoReference"],
+    editorViewport?: EditorViewport,
+  ): Point {
+    if (mapCamera && geoReference) {
+      const geo = trackWorldToGeo(point, {
+        center: { lat: geoReference.centerLat, lon: geoReference.centerLon },
+        zoom: geoReference.zoom,
+        pixelsPerWorldUnit: geoReference.pixelsPerWorldUnit,
+      });
+      return geoToScreen(geo, mapCamera, this.app.screen.width, this.app.screen.height);
+    }
+    const { scale, offsetX, offsetY } = this.viewport();
+    const zoom = editorViewport?.zoom ?? 1;
+    return {
+      x: this.app.screen.width / 2 + (offsetX + point.x * scale - this.app.screen.width / 2) * zoom + (editorViewport?.panX ?? 0),
+      y: this.app.screen.height / 2 + (offsetY + point.y * scale - this.app.screen.height / 2) * zoom + (editorViewport?.panY ?? 0),
+    };
+  }
+
+  fitEditorViewport(points: Point[], closed: boolean, trackWidth: number): EditorViewport {
+    if (points.length === 0) return { zoom: 1, panX: 0, panY: 0 };
+    const { scale, offsetX, offsetY } = this.viewport();
+    const bounds = smoothTrackPoints(points, closed, 6).reduce(
+      (result, point) => ({
+        minX: Math.min(result.minX, offsetX + point.x * scale),
+        maxX: Math.max(result.maxX, offsetX + point.x * scale),
+        minY: Math.min(result.minY, offsetY + point.y * scale),
+        maxY: Math.max(result.maxY, offsetY + point.y * scale),
+      }),
+      {
+        minX: Number.POSITIVE_INFINITY,
+        maxX: Number.NEGATIVE_INFINITY,
+        minY: Number.POSITIVE_INFINITY,
+        maxY: Number.NEGATIVE_INFINITY,
+      },
+    );
+    const width = Math.max(1, bounds.maxX - bounds.minX);
+    const height = Math.max(1, bounds.maxY - bounds.minY);
+    const margin = Math.max(40, trackWidth * scale / 2 + 20);
+    const zoom = Math.max(
+      0.000001,
+      Math.min(
+        5,
+        Math.max(1, this.app.screen.width - margin * 2) / width,
+        Math.max(1, this.app.screen.height - margin * 2) / height,
+      ),
+    );
+    return {
+      zoom,
+      panX: (this.app.screen.width / 2 - (bounds.minX + bounds.maxX) / 2) * zoom,
+      panY: (this.app.screen.height / 2 - (bounds.minY + bounds.maxY) / 2) * zoom,
+    };
+  }
+
+  private viewport(points?: Point[]): { scale: number; offsetX: number; offsetY: number } {
     const width = this.app.screen.width;
     const height = this.app.screen.height;
-    const scale = Math.min(width / WORLD.width, height / WORLD.height);
+    let minX: number = 0;
+    let minY: number = 0;
+    let maxX: number = WORLD.width;
+    let maxY: number = WORLD.height;
+    if (points) {
+      for (const point of points) {
+        minX = Math.min(minX, point.x);
+        minY = Math.min(minY, point.y);
+        maxX = Math.max(maxX, point.x);
+        maxY = Math.max(maxY, point.y);
+      }
+    }
+    const scale = Math.min(width / (maxX - minX), height / (maxY - minY));
     return {
       scale,
-      offsetX: (width - WORLD.width * scale) / 2,
-      offsetY: (height - WORLD.height * scale) / 2,
+      offsetX: (width - (maxX - minX) * scale) / 2 - minX * scale,
+      offsetY: (height - (maxY - minY) * scale) / 2 - minY * scale,
     };
   }
 
@@ -233,19 +319,6 @@ export class TrackRenderer {
     this.tileSprites.clear();
   }
 
-  private drawBackdrop(g: Graphics, scale: number, offsetX: number, offsetY: number): void {
-    const width = WORLD.width * scale;
-    const height = WORLD.height * scale;
-    g.rect(offsetX, offsetY, width, height).fill(0x121a19);
-    const step = Math.max(scale * 50, 22);
-    for (let x = offsetX; x <= offsetX + width; x += step) {
-      g.moveTo(x, offsetY).lineTo(x, offsetY + height).stroke({ color: 0x26312b, alpha: 0.38, width: 1 });
-    }
-    for (let y = offsetY; y <= offsetY + height; y += step) {
-      g.moveTo(offsetX, y).lineTo(offsetX + width, y).stroke({ color: 0x26312b, alpha: 0.38, width: 1 });
-    }
-  }
-
   private drawPath(
     g: Graphics,
     points: Point[],
@@ -253,6 +326,7 @@ export class TrackRenderer {
     width: number,
     color: number,
     alpha = 1,
+    closed = true,
   ): void {
     if (points.length < 2) return;
     const first = project(points[0]);
@@ -261,7 +335,8 @@ export class TrackRenderer {
       const point = project(points[i]);
       g.lineTo(point.x, point.y);
     }
-    g.closePath().stroke({ color, alpha, width, cap: "round", join: "round" });
+    if (closed) g.closePath();
+    g.stroke({ color, alpha, width, cap: "round", join: "round" });
   }
 
   private drawCurbs(g: Graphics, track: Track, project: (point: Point) => Point, scale: number): void {
@@ -304,11 +379,18 @@ export class TrackRenderer {
     g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ color: 0xffffff, width: 4, alpha: 0.95 });
   }
 
-  private drawEditorNodes(g: Graphics, points: Point[], project: (point: Point) => Point): void {
+  private drawEditorNodes(
+    g: Graphics,
+    points: Point[],
+    project: (point: Point) => Point,
+    selectedIndex: number,
+  ): void {
     points.forEach((point, index) => {
       const at = project(point);
-      g.circle(at.x, at.y, index === 0 ? 8 : 5).fill(index === 0 ? 0xf1c75b : 0x72d9c4);
-      g.circle(at.x, at.y, index === 0 ? 3 : 2).fill(0x10201e);
+      const selected = index === selectedIndex;
+      g.circle(at.x, at.y, selected ? 11 : index === 0 ? 8 : 6)
+        .fill(selected ? 0xffffff : index === 0 ? 0xf1c75b : 0x72d9c4);
+      g.circle(at.x, at.y, selected ? 5 : index === 0 ? 3 : 2).fill(0x10201e);
     });
   }
 

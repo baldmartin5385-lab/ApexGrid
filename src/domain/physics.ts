@@ -5,6 +5,11 @@ export interface Controls {
   brake: boolean;
   left: boolean;
   right: boolean;
+  steer?: number;
+  maxSpeed?: number;
+  acceleration?: number;
+  braking?: number;
+  corneringGrip?: number;
 }
 
 export interface CarState extends Point {
@@ -23,18 +28,37 @@ export interface CarState extends Point {
 const MAX_SPEED = 95;
 const FIXED_STEP = 1 / 120;
 
-function nearestPoint(track: Track, x: number, y: number): { index: number; distance: number } {
+function nearestPoint(
+  track: Track,
+  x: number,
+  y: number,
+  hintIndex?: number,
+): { index: number; distance: number } {
+  const points = track.points;
+  const count = points.length;
   let index = 0;
-  let distance = Number.POSITIVE_INFINITY;
-  for (let i = 0; i < track.points.length; i += 1) {
-    const point = track.points[i];
-    const candidate = Math.hypot(point.x - x, point.y - y);
-    if (candidate < distance) {
-      distance = candidate;
-      index = i;
+  let distanceSquared = Number.POSITIVE_INFINITY;
+  const localSearch = hintIndex !== undefined && count > 40;
+  const searchRange = localSearch ? Math.min(16, Math.floor((count - 1) / 2)) : count;
+  const start = localSearch ? hintIndex - searchRange : 0;
+  const end = localSearch ? hintIndex + searchRange : count - 1;
+
+  for (let offset = start; offset <= end; offset += 1) {
+    const candidateIndex = (offset + count) % count;
+    const point = points[candidateIndex];
+    const dx = point.x - x;
+    const dy = point.y - y;
+    const candidateDistanceSquared = dx * dx + dy * dy;
+    if (candidateDistanceSquared < distanceSquared) {
+      distanceSquared = candidateDistanceSquared;
+      index = candidateIndex;
     }
   }
-  return { index, distance };
+
+  if (localSearch && distanceSquared > (track.width * 2) ** 2) {
+    return nearestPoint(track, x, y);
+  }
+  return { index, distance: Math.sqrt(distanceSquared) };
 }
 
 function tangent(track: Track, index: number): number {
@@ -74,21 +98,21 @@ export function stepCar(
     car.raceSeconds += dt;
     car.lapSeconds += dt;
 
-    const { distance } = nearestPoint(track, car.x, car.y);
+    const { distance } = nearestPoint(track, car.x, car.y, car.progressIndex);
     car.offTrack = distance > track.width * 0.58;
-    const grip = car.offTrack ? 0.32 : 1;
-    const acceleration = controls.throttle ? 14 : 0;
-    const braking = controls.brake ? 20 : 0;
+    const grip = (car.offTrack ? 0.32 : 1) * (controls.corneringGrip ?? 1);
+    const acceleration = controls.throttle ? controls.acceleration ?? 14 : 0;
+    const braking = controls.brake ? controls.braking ?? 20 : 0;
     car.speed += (acceleration - braking - car.speed * (car.offTrack ? 0.18 : 0.015)) * dt;
-    car.speed = Math.max(0, Math.min(MAX_SPEED, car.speed));
+    car.speed = Math.max(0, Math.min(MAX_SPEED, controls.maxSpeed ?? MAX_SPEED, car.speed));
 
-    const steerInput = Number(controls.right) - Number(controls.left);
+    const steerInput = controls.steer ?? Number(controls.right) - Number(controls.left);
     const steering = (0.75 + Math.min(car.speed / 190, 1.2) * 0.7) * grip;
     car.heading += steerInput * steering * dt * Math.min(car.speed / 55, 1.2);
     car.x += Math.cos(car.heading) * car.speed * dt;
     car.y += Math.sin(car.heading) * car.speed * dt;
 
-    const closest = nearestPoint(track, car.x, car.y);
+    const closest = nearestPoint(track, car.x, car.y, car.progressIndex);
     const pointCount = track.points.length;
     const wrappedForward = car.progressIndex > pointCount * 0.78 && closest.index < pointCount * 0.22;
     if (wrappedForward) {

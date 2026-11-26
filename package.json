@@ -11,13 +11,17 @@
     "typecheck": "tsc --noEmit",
     "desktop": "npm run build && electron .",
     "desktop:build": "npm run build && electron-builder --win nsis --publish never",
+    "desktop:build:mac": "npm run build && electron-builder --mac dmg --publish never",
     "mobile:setup": "npm run build && cap add android && node scripts/configure-android-user-agent.cjs",
     "mobile:sync": "npm run build && cap sync",
-    "mobile:android": "npm run mobile:sync && cap open android"
+    "mobile:android": "npm run mobile:sync && cap open android",
+    "mobile:ios:setup": "npm run build && cap add ios && cap sync ios",
+    "mobile:ios": "npm run mobile:ios:setup && cap open ios"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.3",
     "@capacitor/core": "^7.4.3",
+    "@capacitor/ios": "^7.4.3",
     "pixi.js": "^8.13.2"
   },
   "devDependencies": {

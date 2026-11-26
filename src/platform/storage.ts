@@ -15,8 +15,10 @@ export interface GameSettings {
   theme: "modern" | "classic";
   raceStart: "lights-out" | "rolling";
   units: "metric" | "imperial";
-  engineSound: "off" | "engine-e" | "engine-v" | "formula-1";
+  engineSound: "off" | "series";
   series: RaceSeries;
+  qualifyingMinutes: number;
+  raceLaps: number;
 }
 
 export function defaultSettings(): GameSettings {
@@ -24,8 +26,10 @@ export function defaultSettings(): GameSettings {
     theme: "modern",
     raceStart: "lights-out",
     units: "metric",
-    engineSound: "formula-1",
+    engineSound: "series",
     series: "f1",
+    qualifyingMinutes: 5,
+    raceLaps: 5,
   };
 }
 
@@ -64,11 +68,7 @@ export function loadSave(): SaveData {
         raceStart: rawSettings.raceStart === "rolling" ? "rolling" : "lights-out",
         units: rawSettings.units === "imperial" ? "imperial" : "metric",
         engineSound:
-          rawSettings.engineSound === "off" ||
-          rawSettings.engineSound === "engine-v" ||
-          rawSettings.engineSound === "formula-1"
-            ? rawSettings.engineSound
-            : "formula-1",
+          rawSettings.engineSound === "off" ? "off" : "series",
         series:
           rawSettings.series === "f2" ||
           rawSettings.series === "f3" ||
@@ -76,6 +76,15 @@ export function loadSave(): SaveData {
           rawSettings.series === "prototype"
             ? rawSettings.series
             : "f1",
+        qualifyingMinutes:
+          typeof rawSettings.qualifyingMinutes === "number" &&
+          Number.isFinite(rawSettings.qualifyingMinutes)
+            ? Math.max(1, Math.min(60, Math.round(rawSettings.qualifyingMinutes)))
+            : 5,
+        raceLaps:
+          typeof rawSettings.raceLaps === "number" && Number.isFinite(rawSettings.raceLaps)
+            ? Math.max(1, Math.min(30, Math.round(rawSettings.raceLaps)))
+            : 5,
       },
     };
   } catch (error) {

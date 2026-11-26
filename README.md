@@ -1,8 +1,8 @@
 # ApexGrid
 
-ApexGrid is an offline-first motorsport prototype built with TypeScript, PixiJS 8, and Vite. Its playable slice includes a procedural club circuit, fixed-step autonomous racing physics, selectable F1, F2, F3, GT3, and prototype AI fields, a three-lap spectator race, a waypoint-based circuit workshop, and a local garage with JSON export/import. F1 uses the six bundled car images; the other series use distinct, locally drawn car designs. Drivers and teams are fictional, and the player never controls a car.
+ApexGrid is an offline-first motorsport prototype built with TypeScript, PixiJS 8, and Vite. Its spectator-only race weekend runs AI qualifying followed by an AI race, with editable session lengths, 1×–8× simulation speed, and a simulated skip-to-finish. During sessions, the scroll wheel or camera buttons zoom the view and every leaderboard row follows its driver. The 16 transparent vehicle sprites extracted from the supplied image are catalogued with distinct specifications; the AI uses varied cars and vehicle-specific speed, acceleration, braking, and grip. Engine audio is synthesized per car and spatially mixed around the followed driver. Drivers and teams are fictional; the player never controls a car.
 
-The workshop includes optional OpenStreetMap-based map tiles (street, CARTO dark, Esri imagery, and OpenTopoMap), place search, attribution, and local road-graph snapping. Road graphs are fetched only when snap-to-road is enabled, cached locally, and reused for local routing; saved track geometry is used for racing without map requests. Live map, geocoding, and initial road-graph downloads require an internet connection.
+The workshop starts from a blank canvas, a PNG image underlay, or a world map. Zoom with the wheel or controls, drag the empty canvas to pan, and drag individual waypoints to reshape the circuit. Control points form a smooth racing line, and new layouts stay open until **Finish Circuit** is selected. AI drivers brake for corners and attempt passes when they catch a slower car. World-map mode includes place search, OpenStreetMap-based map tiles (street, CARTO dark, Esri imagery, and OpenTopoMap), attribution, and optional local road-graph snapping. Map tiles and the first road-graph download need an internet connection; saved tracks run offline.
 
 ## Requirements
 
@@ -17,7 +17,7 @@ npm install
 npm run dev
 ```
 
-Open the Vite URL printed in the terminal. Select **Race**, choose a series, and press **Start Practice** to watch the full AI field race. The simulator is spectator-only.
+Open the Vite URL printed in the terminal. Select **Race**, choose a series, set qualifying minutes and race laps, then start qualifying. Qualifying automatically sets the race grid by best lap; **Skip to Race Finish** simulates both sessions.
 
 ## Build targets
 
@@ -26,9 +26,10 @@ npm run typecheck
 npm run build
 npm run desktop
 npm run desktop:build
+npm run desktop:build:mac
 ```
 
-`npm run desktop:build` creates the Windows NSIS installer (`.exe`). The automated release pipeline intentionally produces only the Windows installer and Android APK.
+`npm run desktop:build` creates the Windows NSIS installer (`.exe`); `npm run desktop:build:mac` creates an unsigned macOS `.dmg`.
 
 For Android, initialize the native wrapper once, then sync web assets and open the project in Android Studio:
 
@@ -37,14 +38,14 @@ npm run mobile:setup
 npm run mobile:android
 ```
 
-Download the latest Android APK from [GitHub Releases](https://github.com/baldmartin5385-lab/ApexGrid/releases/latest/download/app-debug.apk). GitHub Actions builds an Android debug APK and a Windows `.exe` on every push to `main`; version tags (`v*`) attach those two packages to a GitHub Release. The Android APK and Windows installer are not store/production signed.
+For Apple platforms, build the macOS desktop installer on a Mac. To generate and open the iOS project, run `npm run mobile:ios` on macOS with Xcode installed. GitHub Actions builds Windows `.exe`, macOS `.dmg`, Android debug APK, and an unsigned iOS Simulator app on pushes to `main` and on manual runs. Version tags (`v*`) publish these artifacts as a release. The iOS Simulator artifact is not an iPhone/iPad installable IPA; App Store distribution requires Apple signing credentials. Android and desktop builds are not store/production signed.
 
 ### Apple devices
 
-ApexGrid supports iPhone, iPad, and Mac through Safari as an installable web app. Serve the built `dist/` folder over HTTPS, open it in Safari, then choose **Share → Add to Home Screen** on iPhone/iPad. The app shell and same-origin assets are cached for offline launches after the first visit. Apple users do not need an API key or a separate package download. This does not produce a native iOS `.ipa` or macOS `.dmg`; those would be additional signed Apple artifacts.
+ApexGrid supports iPhone and iPad as an installable Safari web app, an iOS Simulator project, and macOS as an unsigned Electron `.dmg`. On iPhone/iPad, open the hosted app in Safari and choose **Share → Add to Home Screen**. The app shell and same-origin assets are cached for offline launches after the first visit. Native iOS distribution still requires Apple signing credentials.
 
-Progress and preferences (theme, rolling/lights-out start, metric/imperial units, and engine sound) are stored in browser/Electron local storage and are not synced to a server. The default engine sound is the bundled Formula 1 recording; synthesized engine tones and silence remain selectable in Settings. Use **Settings → Export Garage Data** to download a JSON backup, or import a valid ApexGrid garage/track JSON file.
+Progress and preferences (theme, rolling/lights-out start, metric/imperial units, and engine sound) are stored in browser/Electron local storage and are not synced to a server. Every AI car has its own synthesized engine voice, with distinct profiles for F1, F2, F3, GT3, and prototype cars; engine sound can be disabled in Settings. Use **Settings → Export Garage Data** to download a JSON backup, or import a valid ApexGrid garage/track JSON file.
 
 ## Current scope
 
-This is a functional foundation, not the complete production simulator. It supports five selectable spectator race classes with fields of 20–30 fictional AI drivers, but does not yet include multi-series championships, advanced rival strategy, 2.5D presentation, grid/sound-pack import, licensed car art or rosters, or signed production builds. F2, F3, GT3, and prototype cars are original vector designs rather than separate photographic sprite packs.
+This is a functional foundation, not the complete production simulator. It supports five selectable spectator race classes with fields of 20–30 fictional AI drivers, timed qualifying, configurable lap races, and camera spectating. It does not yet include multi-series championships, advanced rival strategy, 2.5D presentation, audio-pack import, vehicle selection/garage sprite previews, or signed production builds. Engine sounds remain procedurally generated rather than recorded.
