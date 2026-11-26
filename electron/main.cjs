@@ -1,5 +1,17 @@
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, session } = require("electron");
 const path = require("node:path");
+
+const MAP_SERVICE_URLS = [
+  "https://tile.openstreetmap.org/*",
+  "https://basemaps.cartocdn.com/*",
+  "https://server.arcgisonline.com/*",
+  "https://tile.openmaps.fr/*",
+  "https://nominatim.openstreetmap.org/*",
+  "https://overpass-api.de/*",
+  "https://router.project-osrm.org/*",
+];
+const MAP_USER_AGENT =
+  "ApexGridSimulator/2.0 (+https://github.com/baldmartin5385-lab/ApexGrid)";
 
 function createWindow() {
   const window = new BrowserWindow({
@@ -18,6 +30,17 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: MAP_SERVICE_URLS },
+    (details, callback) => {
+      callback({
+        requestHeaders: {
+          ...details.requestHeaders,
+          "User-Agent": MAP_USER_AGENT,
+        },
+      });
+    },
+  );
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

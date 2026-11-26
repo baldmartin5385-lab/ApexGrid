@@ -10,8 +10,8 @@
     "preview": "vite preview --host 0.0.0.0",
     "typecheck": "tsc --noEmit",
     "desktop": "npm run build && electron .",
-    "desktop:build": "npm run build && electron-builder --publish never",
-    "mobile:setup": "npm run build && cap add android",
+    "desktop:build": "npm run build && electron-builder --win nsis --publish never",
+    "mobile:setup": "npm run build && cap add android && node scripts/configure-android-user-agent.cjs",
     "mobile:sync": "npm run build && cap sync",
     "mobile:android": "npm run mobile:sync && cap open android"
   },
@@ -41,12 +41,6 @@
     ],
     "win": {
       "target": "nsis"
-    },
-    "mac": {
-      "target": "dmg"
-    },
-    "linux": {
-      "target": "AppImage"
     }
   }
 }

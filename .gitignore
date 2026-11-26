@@ -1,6 +1,7 @@
 node_modules/
 dist/
 release/
+android/
 *.tsbuildinfo
 .DS_Store
 *.log

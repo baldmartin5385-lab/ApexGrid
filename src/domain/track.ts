@@ -9,6 +9,12 @@ export interface Track {
   width: number;
   points: Point[];
   createdAt: string;
+  geoReference?: {
+    centerLat: number;
+    centerLon: number;
+    zoom: number;
+    pixelsPerWorldUnit: number;
+  };
 }
 
 export const WORLD = { width: 1000, height: 700 } as const;
@@ -40,7 +46,33 @@ export function isValidTrack(value: unknown): value is Track {
   const record = value as Record<string, unknown>;
   if (!Array.isArray(record.points)) return false;
   const points = record.points as unknown[];
+  const reference = record.geoReference;
+  const validGeoReference =
+    reference === undefined ||
+    (typeof reference === "object" &&
+      reference !== null &&
+      "centerLat" in reference &&
+      "centerLon" in reference &&
+      "zoom" in reference &&
+      "pixelsPerWorldUnit" in reference &&
+      typeof reference.centerLat === "number" &&
+      Number.isFinite(reference.centerLat) &&
+      reference.centerLat >= -90 &&
+      reference.centerLat <= 90 &&
+      typeof reference.centerLon === "number" &&
+      Number.isFinite(reference.centerLon) &&
+      reference.centerLon >= -180 &&
+      reference.centerLon <= 180 &&
+      typeof reference.zoom === "number" &&
+      Number.isFinite(reference.zoom) &&
+      reference.zoom >= 14 &&
+      reference.zoom <= 20 &&
+      typeof reference.pixelsPerWorldUnit === "number" &&
+      Number.isFinite(reference.pixelsPerWorldUnit) &&
+      reference.pixelsPerWorldUnit > 0);
+
   return (
+    validGeoReference &&
     typeof record.id === "string" &&
     typeof record.name === "string" &&
     typeof record.createdAt === "string" &&

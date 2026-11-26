@@ -41,32 +41,20 @@ jobs:
       - name: Generate Android project
         run: npm run mobile:setup
 
-      - name: Build APK and Android App Bundle
+      - name: Build Android APK
         working-directory: android
-        run: ./gradlew assembleDebug bundleRelease
+        run: ./gradlew assembleDebug
 
       - name: Upload Android packages
         uses: actions/upload-artifact@v4
         with:
           name: ApexGrid-Android
-          path: |
-            android/app/build/outputs/apk/debug/app-debug.apk
-            android/app/build/outputs/bundle/release/app-release.aab
+          path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
 
-  desktop:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: Windows
-            os: windows-latest
-          - platform: macOS
-            os: macos-latest
-          - platform: Linux
-            os: ubuntu-latest
-    runs-on: ${{ matrix.os }}
+  windows:
+    runs-on: windows-latest
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -83,11 +71,11 @@ jobs:
       - name: Build desktop package
         run: npm run desktop:build
 
-      - name: Upload desktop package
+      - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
-          name: ApexGrid-${{ matrix.platform }}
-          path: release/*.*
+          name: ApexGrid-Windows
+          path: release/*.exe
           if-no-files-found: error
           retention-days: 30
 
@@ -95,7 +83,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs:
       - android
-      - desktop
+      - windows
     runs-on: ubuntu-latest
     steps:
       - name: Download all platform packages

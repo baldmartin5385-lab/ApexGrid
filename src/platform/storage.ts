@@ -1,4 +1,5 @@
 import { makeStarterTrack, type Track, isValidTrack } from "../domain/track";
+import { type RaceSeries } from "../domain/ai";
 
 const STORAGE_KEY = "apexgrid.save.v1";
 
@@ -14,7 +15,8 @@ export interface GameSettings {
   theme: "modern" | "classic";
   raceStart: "lights-out" | "rolling";
   units: "metric" | "imperial";
-  engineSound: "off" | "engine-e" | "engine-v";
+  engineSound: "off" | "engine-e" | "engine-v" | "formula-1";
+  series: RaceSeries;
 }
 
 export function defaultSettings(): GameSettings {
@@ -22,7 +24,8 @@ export function defaultSettings(): GameSettings {
     theme: "modern",
     raceStart: "lights-out",
     units: "metric",
-    engineSound: "engine-e",
+    engineSound: "formula-1",
+    series: "f1",
   };
 }
 
@@ -61,9 +64,18 @@ export function loadSave(): SaveData {
         raceStart: rawSettings.raceStart === "rolling" ? "rolling" : "lights-out",
         units: rawSettings.units === "imperial" ? "imperial" : "metric",
         engineSound:
-          rawSettings.engineSound === "off" || rawSettings.engineSound === "engine-v"
+          rawSettings.engineSound === "off" ||
+          rawSettings.engineSound === "engine-v" ||
+          rawSettings.engineSound === "formula-1"
             ? rawSettings.engineSound
-            : "engine-e",
+            : "formula-1",
+        series:
+          rawSettings.series === "f2" ||
+          rawSettings.series === "f3" ||
+          rawSettings.series === "gt3" ||
+          rawSettings.series === "prototype"
+            ? rawSettings.series
+            : "f1",
       },
     };
   } catch (error) {

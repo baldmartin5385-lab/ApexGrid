@@ -12,6 +12,7 @@ export interface CarState extends Point {
   speed: number;
   progressIndex: number;
   lap: number;
+  lapStarted: boolean;
   bestLapSeconds: number | null;
   lastLapSeconds: number | null;
   raceSeconds: number;
@@ -19,7 +20,7 @@ export interface CarState extends Point {
   offTrack: boolean;
 }
 
-const MAX_SPEED = 330;
+const MAX_SPEED = 95;
 const FIXED_STEP = 1 / 120;
 
 function nearestPoint(track: Track, x: number, y: number): { index: number; distance: number } {
@@ -51,6 +52,7 @@ export function createCar(track: Track, rollingStart = false): CarState {
     speed: rollingStart ? 45 : 0,
     progressIndex: 0,
     lap: 0,
+    lapStarted: false,
     bestLapSeconds: null,
     lastLapSeconds: null,
     raceSeconds: 0,
@@ -75,9 +77,9 @@ export function stepCar(
     const { distance } = nearestPoint(track, car.x, car.y);
     car.offTrack = distance > track.width * 0.58;
     const grip = car.offTrack ? 0.32 : 1;
-    const acceleration = controls.throttle ? 155 : 0;
-    const braking = controls.brake ? 290 : 0;
-    car.speed += (acceleration - braking - car.speed * (car.offTrack ? 1.55 : 0.42)) * dt;
+    const acceleration = controls.throttle ? 14 : 0;
+    const braking = controls.brake ? 20 : 0;
+    car.speed += (acceleration - braking - car.speed * (car.offTrack ? 0.18 : 0.015)) * dt;
     car.speed = Math.max(0, Math.min(MAX_SPEED, car.speed));
 
     const steerInput = Number(controls.right) - Number(controls.left);
@@ -90,12 +92,16 @@ export function stepCar(
     const pointCount = track.points.length;
     const wrappedForward = car.progressIndex > pointCount * 0.78 && closest.index < pointCount * 0.22;
     if (wrappedForward) {
-      car.lap += 1;
-      car.lastLapSeconds = car.lapSeconds;
-      car.bestLapSeconds =
-        car.bestLapSeconds === null
-          ? car.lapSeconds
-          : Math.min(car.bestLapSeconds, car.lapSeconds);
+      if (car.lapStarted) {
+        car.lap += 1;
+        car.lastLapSeconds = car.lapSeconds;
+        car.bestLapSeconds =
+          car.bestLapSeconds === null
+            ? car.lapSeconds
+            : Math.min(car.bestLapSeconds, car.lapSeconds);
+      } else {
+        car.lapStarted = true;
+      }
       car.lapSeconds = 0;
     }
     if (closest.index >= car.progressIndex || wrappedForward) {

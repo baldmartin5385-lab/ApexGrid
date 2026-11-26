@@ -1,11 +1,26 @@
 import "./style.css";
-import { Application } from "pixi.js";
-import { createAIFleet, stepAIDriver, type AIDriver } from "./domain/ai";
+import { Application, Assets, type Texture } from "pixi.js";
+import { createAIFleet, RACE_SERIES, stepAIDriver, type AIDriver, type RaceSeries } from "./domain/ai";
 import { createCar, type CarState } from "./domain/physics";
 import { isValidTrack, trackLength, WORLD, type Point, type Track } from "./domain/track";
 import { TrackRenderer } from "./render/trackRenderer";
+import { F1_CAR_SPRITES } from "./render/carSprites";
 import { loadSave, persistSave, type SaveData } from "./platform/storage";
 import { EngineAudio } from "./platform/engineAudio";
+import { MapRouter, geoToTrackWorld, trackWorldToGeo, type MapPlace } from "./engine/MapRouter";
+import { clampZoom, TileProvider, type GeoPoint, type MapCamera } from "./map/TileProvider";
+import { createMapAttributionOverlay } from "./ui/MapAttributionOverlay";
+
+if (
+  "serviceWorker" in navigator &&
+  (window.location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(window.location.hostname))
+) {
+  window.addEventListener("load", () => {
+    void navigator.serviceWorker.register("./sw.js").catch((error: unknown) => {
+      console.warn("ApexGrid offline app support could not be enabled.", error);
+    });
+  });
+}
 
 type Screen = "overview" | "race" | "workshop" | "garage" | "settings";
 type RaceStatus = "ready" | "running" | "paused" | "finished";
@@ -16,29 +31,29 @@ if (!appRoot) throw new Error("ApexGrid app root is missing.");
 appRoot.innerHTML = `
   <div class="app-frame">
     <aside class="rail" aria-label="Primary navigation">
-      <a class="brand-mark" href="#" aria-label="ApexGrid home">A<span>G</span></a>
+      <a class="brand-mark" href="#" aria-label="ApexGrid home"><span class="brand-monogram">AG</span><span class="brand-copy">APEXGRID<small>MOTORSPORT</small></span></a>
       <div class="rail-rule"></div>
-      <button class="rail-link active" data-screen="overview" aria-label="Overview" title="Overview"><span class="rail-icon">⌂</span><span class="rail-label">Home</span></button>
-      <button class="rail-link" data-screen="race" aria-label="Practice" title="Practice"><span class="rail-icon">◉</span><span class="rail-label">Race</span></button>
-      <button class="rail-link" data-screen="workshop" aria-label="Track workshop" title="Track workshop"><span class="rail-icon">⌁</span><span class="rail-label">Build</span></button>
-      <button class="rail-link" data-screen="garage" aria-label="Circuits" title="Circuits"><span class="rail-icon">▤</span><span class="rail-label">Circuits</span></button>
-      <button class="rail-link" data-screen="settings" aria-label="Settings" title="Settings"><span class="rail-icon">⚙</span><span class="rail-label">Settings</span></button>
-      <div class="rail-bottom"><span class="online-dot"></span><span>LOCAL</span></div>
+      <button class="rail-link active" data-screen="overview" aria-label="Overview" title="Overview"><span class="rail-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg></span><span class="rail-label">Home</span></button>
+      <button class="rail-link" data-screen="race" aria-label="Practice" title="Practice"><span class="rail-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4m0 1c6-4 8 4 14 0v10c-6 4-8-4-14 0"/></svg></span><span class="rail-label">Race</span></button>
+      <button class="rail-link" data-screen="workshop" aria-label="Track workshop" title="Track workshop"><span class="rail-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20c0-5 3-8 8-8s8-3 8-8M4 4v4m0-4h4m12 16v-4m0 4h-4"/></svg></span><span class="rail-label">Workshop</span></button>
+      <button class="rail-link" data-screen="garage" aria-label="Garage" title="Garage"><span class="rail-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10 12 4l9 6v10H3zM7 20v-6h10v6m-7-6v-3h4v3"/></svg></span><span class="rail-label">Garage</span></button>
+      <button class="rail-link" data-screen="settings" aria-label="Settings" title="Settings"><span class="rail-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0-5v2m0 14v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M3 12h2m14 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg></span><span class="rail-label">Settings</span></button>
+      <div class="rail-bottom"><span class="online-dot"></span><span>Saved on this device</span></div>
     </aside>
     <div class="main-frame">
       <header class="topbar">
-        <div class="wordmark">APEX<span>GRID</span><small>SIMULATOR</small></div>
-        <div class="topbar-meta"><span class="save-indicator"><i></i> SAVED LOCALLY</span><span class="avatar">AG</span></div>
+        <div class="wordmark">APEX<span>GRID</span><small>RACE CONTROL</small></div>
+        <div class="topbar-meta"><span class="save-indicator"><i></i> SAVED ON THIS DEVICE</span></div>
       </header>
       <main class="content">
         <div class="page-heading">
           <div><p class="eyebrow" id="eyebrow">MOTORSPORT, YOUR WAY</p><h1 id="page-title">Welcome to ApexGrid</h1><p class="page-subtitle" id="page-subtitle">Build a circuit. Find your line. Leave your mark.</p></div>
-          <div class="heading-meta"><span class="season-tag">SEASON <b>01</b></span><span class="season-tag"><b>OFFLINE</b> READY</span></div>
+          <div class="heading-meta"><span class="season-tag"><b>AI-ONLY RACING</b></span><span class="season-tag">NO PLAYER CONTROLS</span></div>
         </div>
         <section class="workbench" id="workbench">
           <div class="track-card">
             <div class="track-card-top"><div><span class="section-kicker" id="track-kicker">FEATURED CIRCUIT</span><h2 id="track-title">Copper Circuit</h2></div><div class="track-pill"><span></span><span id="track-state">PRACTICE READY</span></div></div>
-            <div class="canvas-wrap" id="canvas-wrap"><div id="track-canvas"></div><div class="canvas-overlay"><span>WORLD TOUR&nbsp; / &nbsp;01</span><span>TRACK MAP&nbsp; · &nbsp;2D</span></div>
+            <div class="canvas-wrap" id="canvas-wrap"><div id="track-canvas"></div><div class="canvas-overlay"><span id="canvas-caption">TRACK OVERVIEW</span><span id="canvas-mode">AI PRACTICE</span></div>
               <div id="race-classification" class="race-classification" aria-live="polite"></div>
               <div class="race-hud"><div class="speed-box"><b id="speed-readout">000</b><span id="speed-unit">KM/H</span></div><div class="race-hud-right"><span>LAP <b id="live-lap-number">1 / 3</b></span><strong id="live-lap-time">00:00.000</strong></div><div class="lap-track"><i id="lap-progress"></i></div></div>
             </div>
@@ -51,7 +66,7 @@ appRoot.innerHTML = `
           </div>
           <aside class="inspector" id="inspector"></aside>
         </section>
-        <footer class="footer"><span><i class="online-dot"></i> ALL SYSTEMS OPERATIONAL</span><span>APEXGRID ENGINE <b>0.1.0</b> <span class="footer-divider">·</span> BUILT FOR THE GRID</span></footer>
+        <footer class="footer"><span><i class="online-dot"></i> PROGRESS SAVES ON THIS DEVICE</span><span>AI-DRIVEN PRACTICE · NO PLAYER CONTROLS</span></footer>
       </main>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -77,16 +92,29 @@ const elements = {
   toast: document.querySelector<HTMLDivElement>("#toast")!,
 };
 
+const mapAttribution = createMapAttributionOverlay();
+elements.canvasWrap.append(mapAttribution);
+mapAttribution.hidden = true;
+
 const save = loadSave();
 const engineAudio = new EngineAudio();
+const mapRouter = new MapRouter();
+const tileProvider = new TileProvider(4);
 let activeScreen: Screen = "overview";
 let raceStatus: RaceStatus = "ready";
 let previewCar: CarState;
 let aiDrivers: AIDriver[] = [];
 let editorTrack: Track | null = null;
+let mapCamera: MapCamera | null = null;
+let mapEnabled = false;
+let snapToRoad = false;
+let roadGraphLoading = false;
+let mapRoutePending = false;
+let mapSearchResults: MapPlace[] = [];
 let lastFrame = 0;
 let lastStandingsRefresh = 0;
 let toastTimer = 0;
+let lastTileErrorToast = 0;
 
 function currentTrack(): Track {
   return save.tracks.find((track) => track.id === save.selectedTrackId) ?? save.tracks[0];
@@ -94,6 +122,10 @@ function currentTrack(): Track {
 
 function raceLeaderCar(): CarState {
   return leadingAIDriver()?.car ?? previewCar;
+}
+
+function currentLapNumber(car: CarState): number {
+  return raceStatus === "finished" ? Math.max(1, Math.min(car.lap, 3)) : Math.min(car.lap + 1, 3);
 }
 
 function showToast(message: string, isError = false): void {
@@ -118,8 +150,16 @@ function formatTime(seconds: number | null): string {
 }
 
 function selectedScreen(screen: Screen): void {
-  if (screen === "workshop" && !editorTrack) {
-    editorTrack = structuredClone(currentTrack());
+  if (screen === "workshop") {
+    if (!editorTrack) editorTrack = structuredClone(currentTrack());
+    const reference = editorTrack.geoReference;
+    if (reference) {
+      mapCamera = {
+        center: { lat: reference.centerLat, lon: reference.centerLon },
+        zoom: reference.zoom,
+        layer: "street",
+      };
+    }
   }
   if (activeScreen === "race" && screen !== "race" && raceStatus === "running") {
     raceStatus = "paused";
@@ -135,11 +175,11 @@ function selectedScreen(screen: Screen): void {
 function renderScreen(): void {
   const track = currentTrack();
   const headings: Record<Screen, [string, string, string]> = {
-    overview: ["MOTORSPORT, YOUR WAY", "Welcome to ApexGrid", "Build a circuit. Find your line. Leave your mark."],
-    race: ["RACE CONTROL  /  PRACTICE", "Time to hit the track", "A clean lap starts with a clear head."],
-    workshop: ["APEXGRID CREATOR  /  CIRCUIT LAB", "Design your next challenge", "Place waypoints on the map to shape your circuit."],
-    garage: ["DRIVER HQ  /  COLLECTION", "Your motorsport garage", "Choose a circuit and make it yours."],
-    settings: ["PREFERENCES  /  LOCAL PROFILE", "Settings", "Tune your race experience and manage local data."],
+    overview: ["YOUR MOTORSPORT DESK", "Welcome to ApexGrid", "Choose a circuit, build one, or watch the AI grid race."],
+    race: ["PRACTICE SESSION", "Watch the field race", "Pick a series, choose a circuit, and let the grid go."],
+    workshop: ["TRACK WORKSHOP", "Design a circuit", "Draw a new layout or trace real roads."],
+    garage: ["YOUR CIRCUITS", "The garage", "Choose a circuit to race or edit."],
+    settings: ["PREFERENCES", "Settings", "Set your units, race start, and audio."],
   };
   const [eyebrow, title, subtitle] = headings[activeScreen];
   elements.eyebrow.textContent = eyebrow;
@@ -148,7 +188,8 @@ function renderScreen(): void {
   elements.trackKicker.textContent =
     activeScreen === "workshop" ? "CIRCUIT PREVIEW" : activeScreen === "garage" ? "SELECTED CIRCUIT" : "FEATURED CIRCUIT";
   elements.trackTitle.textContent = activeScreen === "workshop" && editorTrack ? editorTrack.name : track.name;
-  elements.trackLength.textContent = formatDistance(trackLength(track));
+  const displayedTrack = activeScreen === "workshop" && editorTrack ? editorTrack : track;
+  elements.trackLength.textContent = formatDistance(trackLength(displayedTrack));
   elements.bestLap.textContent = formatTime(raceLeaderCar().bestLapSeconds);
   elements.trackLayout.textContent = activeScreen === "workshop" ? "Custom layout" : "Club circuit";
   elements.trackState.textContent =
@@ -161,11 +202,109 @@ function renderScreen(): void {
   elements.canvasWrap.classList.toggle("racing", activeScreen === "race");
   elements.classification.classList.toggle("visible", activeScreen === "race" && raceStatus !== "ready" && aiDrivers.length > 0);
   elements.workbench.classList.toggle("settings-mode", activeScreen === "settings");
+  const canvasCaption = document.querySelector<HTMLElement>("#canvas-caption");
+  const canvasMode = document.querySelector<HTMLElement>("#canvas-mode");
+  if (canvasCaption) canvasCaption.textContent = activeScreen === "workshop" ? "TRACK WORKSHOP" : "CIRCUIT VIEW";
+  if (canvasMode) {
+    canvasMode.textContent =
+      activeScreen === "race"
+        ? `${RACE_SERIES[save.settings.series].label.toUpperCase()} · ${RACE_SERIES[save.settings.series].gridSize} CARS`
+        : mapEnabled && activeScreen === "workshop"
+          ? "REAL-WORLD MAP"
+          : "AI PRACTICE";
+  }
+  mapAttribution.hidden = !(activeScreen === "workshop" && mapEnabled && mapCamera !== null);
   document.documentElement.dataset.theme = save.settings.theme;
   elements.inspector.innerHTML = renderInspector();
   elements.actions.innerHTML = renderTrackActions();
   bindScreenActions();
   draw();
+}
+
+function renderMapSearchResults(): string {
+  return mapSearchResults
+    .map(
+      (place, index) =>
+        `<button class="map-place-result" type="button" data-place-index="${index}">${escapeHtml(place.displayName)}</button>`,
+    )
+    .join("");
+}
+
+function createGeoReference(camera: MapCamera): NonNullable<Track["geoReference"]> {
+  const width = elements.mount.clientWidth || 1000;
+  const height = elements.mount.clientHeight || 700;
+  return {
+    centerLat: camera.center.lat,
+    centerLon: camera.center.lon,
+    zoom: camera.zoom,
+    pixelsPerWorldUnit: Math.max(0.1, Math.min(width / WORLD.width, height / WORLD.height)),
+  };
+}
+
+async function searchMapPlaces(): Promise<void> {
+  const input = document.querySelector<HTMLInputElement>("#map-search");
+  if (!input) return;
+  const query = input.value.trim();
+  if (query.length < 2) {
+    showToast("Enter at least two characters to search.", true);
+    return;
+  }
+  try {
+    mapSearchResults = await mapRouter.searchPlaces(query);
+    renderScreen();
+    if (mapSearchResults.length === 0) showToast("No matching places were found.");
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : "Place search failed.", true);
+  }
+}
+
+function selectMapPlace(index: number): void {
+  const place = mapSearchResults[index];
+  if (!place || !editorTrack) return;
+  const layer = mapCamera?.layer ?? "street";
+  mapCamera = {
+    center: place.point,
+    zoom: clampZoom(layer, 16),
+    layer,
+  };
+  editorTrack.geoReference = createGeoReference(mapCamera);
+  mapEnabled = true;
+  mapSearchResults = [];
+  renderScreen();
+  showToast(`Map centered on ${place.displayName.split(",")[0]}.`);
+  if (snapToRoad) void setSnapToRoad(true);
+}
+
+async function setSnapToRoad(enabled: boolean): Promise<void> {
+  if (!enabled) {
+    snapToRoad = false;
+    renderScreen();
+    return;
+  }
+  if (!mapCamera || !editorTrack?.geoReference) {
+    showToast("Search for a place before enabling snap-to-road.", true);
+    renderScreen();
+    return;
+  }
+  if (mapCamera.zoom < 14) {
+    showToast("Snap-to-road requires map zoom 14 or higher.", true);
+    renderScreen();
+    return;
+  }
+  roadGraphLoading = true;
+  renderScreen();
+  try {
+    await mapRouter.loadRoadGraph(mapCamera.center);
+    snapToRoad = true;
+    mapEnabled = true;
+    showToast("Road network ready. Waypoints will route locally.");
+  } catch (error) {
+    snapToRoad = false;
+    showToast(error instanceof Error ? error.message : "The road network could not be loaded.", true);
+  } finally {
+    roadGraphLoading = false;
+    renderScreen();
+  }
 }
 
 function renderTrackActions(): string {
@@ -191,13 +330,13 @@ function renderInspector(): string {
         <p class="section-kicker">RACE</p>
         <div class="settings-row"><span class="settings-icon">▥</span><span class="settings-copy"><b>RACE START</b><small>Starting procedure</small></span><select id="settings-start" aria-label="Race start"><option value="lights-out" ${save.settings.raceStart === "lights-out" ? "selected" : ""}>Lights out</option><option value="rolling" ${save.settings.raceStart === "rolling" ? "selected" : ""}>Rolling</option></select></div>
         <div class="settings-row"><span class="settings-icon">▤</span><span class="settings-copy"><b>UNITS</b><small>Speed and distance</small></span><select id="settings-units" aria-label="Units"><option value="metric" ${save.settings.units === "metric" ? "selected" : ""}>Metric</option><option value="imperial" ${save.settings.units === "imperial" ? "selected" : ""}>Imperial</option></select></div>
-        <div class="settings-row"><span class="settings-icon">◖</span><span class="settings-copy"><b>ENGINE SOUND</b><small>Procedural engine tone</small></span><select id="settings-audio" aria-label="Engine sound"><option value="off" ${save.settings.engineSound === "off" ? "selected" : ""}>Off</option><option value="engine-e" ${save.settings.engineSound === "engine-e" ? "selected" : ""}>Engine E</option><option value="engine-v" ${save.settings.engineSound === "engine-v" ? "selected" : ""}>Engine V</option></select></div>
+        <div class="settings-row"><span class="settings-icon">◖</span><span class="settings-copy"><b>ENGINE SOUND</b><small>Formula 1 race recording</small></span><select id="settings-audio" aria-label="Engine sound"><option value="off" ${save.settings.engineSound === "off" ? "selected" : ""}>Off</option><option value="formula-1" ${save.settings.engineSound === "formula-1" ? "selected" : ""}>Formula 1</option><option value="engine-e" ${save.settings.engineSound === "engine-e" ? "selected" : ""}>Engine E</option><option value="engine-v" ${save.settings.engineSound === "engine-v" ? "selected" : ""}>Engine V</option></select></div>
       </div>
       <div class="settings-group">
         <p class="section-kicker">FILES</p>
         <button class="settings-file" data-action="export-save"><span class="settings-icon">↑</span><b>EXPORT GARAGE DATA</b><span>›</span></button>
         <button class="settings-file" data-action="import-save"><span class="settings-icon">↓</span><b>IMPORT CIRCUITS</b><span>›</span></button>
-        <input id="import-file" class="visually-hidden" type="file" accept="application/json,.json" />
+        <input id="import-file" class="visually-hidden" type="file" accept="application/json,.json,.apex" />
       </div>
       <div class="settings-group help-group">
         <p class="section-kicker">HELP &amp; INFO</p>
@@ -208,6 +347,16 @@ function renderInspector(): string {
   if (activeScreen === "workshop") {
     const editing = editorTrack ?? currentTrack();
     return `
+      <div class="map-tools">
+        <p class="section-kicker">REAL-WORLD MAP</p>
+        <div class="map-search-row"><input id="map-search" class="text-field" type="search" placeholder="Search a city or circuit" autocomplete="off" /><button class="button button-quiet" data-action="map-search">SEARCH</button></div>
+        <div class="map-search-results" id="map-search-results">${renderMapSearchResults()}</div>
+        <div class="map-layer-row"><label class="field-label" for="map-layer">TILE STYLE</label><select id="map-layer"><option value="street" ${mapCamera?.layer === "street" || !mapCamera ? "selected" : ""}>Street</option><option value="dark" ${mapCamera?.layer === "dark" ? "selected" : ""}>Dark</option><option value="satellite" ${mapCamera?.layer === "satellite" ? "selected" : ""}>Satellite</option><option value="topographic" ${mapCamera?.layer === "topographic" ? "selected" : ""}>Topographic</option></select></div>
+        <button class="button button-quiet full-width" data-action="map-mode">${mapEnabled ? "HIDE REAL MAP" : "SHOW REAL MAP"}</button>
+        <label class="map-snap-row"><input id="snap-to-road" type="checkbox" ${snapToRoad ? "checked" : ""} ${roadGraphLoading ? "disabled" : ""} /><span><b>SNAP TO ROAD</b><small>${roadGraphLoading ? "Loading the local road graph…" : "One 2 km download; clicks route locally."}</small></span></label>
+        <div class="map-zoom-row"><span>${mapCamera ? `ZOOM ${mapCamera.zoom}` : "ZOOM 16"}</span><button class="button button-quiet" data-action="map-zoom-out" aria-label="Zoom out">−</button><button class="button button-quiet" data-action="map-zoom-in" aria-label="Zoom in">+</button></div>
+        <button class="button button-quiet full-width" data-action="export-track">DOWNLOAD .APEX TRACK</button>
+      </div>
       <div class="inspector-head"><span class="section-kicker">CIRCUIT DESIGNER</span><span class="step-number">01 / 03</span></div>
       <h3>Make it yours.</h3><p class="muted">Click the map to place connected points. Use at least 8 waypoints for a valid lap.</p>
       <label class="field-label" for="track-name">CIRCUIT NAME</label><input id="track-name" class="text-field" maxlength="32" value="${escapeHtml(editing.name)}" />
@@ -235,23 +384,26 @@ function renderInspector(): string {
     const activeCar = raceLeaderCar();
     return `
       <div class="inspector-head"><span class="section-kicker">SESSION CONTROL</span><span class="step-number">PRACTICE</span></div>
-      <h3>Watch the field race.</h3><p class="muted">Six automatic drivers compete for the three-lap finish on ${escapeHtml(currentTrack().name)}.</p>
+      <h3>Watch the field race.</h3><p class="muted">${RACE_SERIES[save.settings.series].gridSize} AI drivers, three laps, and no player controls.</p>
+      <label class="field-label" for="race-series">RACING SERIES</label>
+      <select id="race-series" class="race-series-select" aria-label="Racing series">
+        ${Object.entries(RACE_SERIES).map(([id, series]) => `<option value="${id}" ${save.settings.series === id ? "selected" : ""}>${series.label} · ${series.gridSize} cars</option>`).join("")}
+      </select>
       <div class="race-timing"><span>SESSION</span><b>${raceStatus === "running" ? "LIVE" : raceStatus === "paused" ? "PAUSED" : raceStatus === "finished" ? "FINISHED" : "READY"}</b></div>
-      <div class="lap-grid"><div><span>CURRENT LAP</span><b>${activeCar.lap + 1}<small> / 3</small></b></div><div><span>LAST LAP</span><b class="time-stat">${formatTime(activeCar.lastLapSeconds)}</b></div></div>
+      <div class="lap-grid"><div><span>CURRENT LAP</span><b>${currentLapNumber(activeCar)}<small> / 3</small></b></div><div><span>LAST LAP</span><b class="time-stat">${formatTime(activeCar.lastLapSeconds)}</b></div></div>
       <div class="note-card grid-note"><span class="note-icon">◉</span><p><b>AUTOMATIC GRID</b><br>Every car is driven by AI.<br>No player driving controls.</p></div>
       <div class="inspector-actions"><button class="button button-quiet" data-action="reset-race">RESET SESSION</button><button class="button button-quiet" data-action="go-garage">CHANGE TRACK</button></div>
     `;
   }
   return `
-    <div class="inspector-head"><span class="section-kicker">DRIVER DASHBOARD</span><span class="step-number">ROOKIE</span></div>
+    <div class="inspector-head"><span class="section-kicker">RACE CONTROL</span><span class="step-number">AI GRID</span></div>
     <h3>Ready when you are.</h3><p class="muted">Watch an automatic race on ${escapeHtml(currentTrack().name)} or head to the workshop and draw a new circuit.</p>
     <div class="feature-list">
-      <button class="feature-item" data-action="go-race"><span class="feature-icon gold">↗</span><span><b>QUICK PRACTICE</b><small>Three-lap time trial</small></span><span class="feature-arrow">→</span></button>
+      <button class="feature-item" data-action="go-race"><span class="feature-icon gold">↗</span><span><b>QUICK PRACTICE</b><small>${RACE_SERIES[save.settings.series].gridSize}-car AI race</small></span><span class="feature-arrow">→</span></button>
       <button class="feature-item" data-action="go-workshop"><span class="feature-icon mint">⌁</span><span><b>TRACK WORKSHOP</b><small>Build a circuit from scratch</small></span><span class="feature-arrow">→</span></button>
       <button class="feature-item" data-action="go-garage"><span class="feature-icon coral">▤</span><span><b>YOUR GARAGE</b><small>Circuits &amp; driver records</small></span><span class="feature-arrow">→</span></button>
     </div>
-    <div class="season-card"><span class="season-emblem">01</span><div><span class="section-kicker">ROOKIE SERIES</span><b>Road to the podium</b><small>${save.racesCompleted} ${save.racesCompleted === 1 ? "race" : "races"} completed</small></div><span class="locked-tag">OPEN</span></div>
-    <div class="note-card"><span class="note-icon">◎</span><p>Progress saves automatically on this device. No account or internet required.</p></div>
+    <div class="note-card"><span class="note-icon">i</span><p>Your circuits and race results stay on this device. No account required.</p></div>
   `;
 }
 
@@ -299,14 +451,46 @@ function bindScreenActions(): void {
       if (setting === "theme" && (value === "modern" || value === "classic")) save.settings.theme = value;
       if (setting === "raceStart" && (value === "lights-out" || value === "rolling")) save.settings.raceStart = value;
       if (setting === "units" && (value === "metric" || value === "imperial")) save.settings.units = value;
-      if (setting === "engineSound" && (value === "off" || value === "engine-e" || value === "engine-v")) {
+      if (setting === "engineSound" && (value === "off" || value === "engine-e" || value === "engine-v" || value === "formula-1")) {
         save.settings.engineSound = value;
+        setEngineRunning(raceStatus === "running");
       }
       commitSave();
       renderScreen();
       showToast("Preferences saved on this device.");
     });
   }
+  document.querySelector<HTMLInputElement>("#map-search")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void searchMapPlaces();
+    }
+  });
+  document.querySelector<HTMLSelectElement>("#map-layer")?.addEventListener("change", (event) => {
+    if (!mapCamera) return;
+    const value = (event.currentTarget as HTMLSelectElement).value;
+    if (value !== "street" && value !== "dark" && value !== "satellite" && value !== "topographic") return;
+    mapCamera.layer = value;
+    mapCamera.zoom = clampZoom(value, mapCamera.zoom);
+    draw();
+  });
+  document.querySelector<HTMLInputElement>("#snap-to-road")?.addEventListener("change", (event) => {
+    void setSnapToRoad((event.currentTarget as HTMLInputElement).checked);
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-place-index]").forEach((button) => {
+    button.addEventListener("click", () => selectMapPlace(Number(button.dataset.placeIndex)));
+  });
+  document.querySelector<HTMLSelectElement>("#race-series")?.addEventListener("change", (event) => {
+    const series = (event.currentTarget as HTMLSelectElement).value;
+    if (!isRaceSeries(series)) return;
+    save.settings.series = series;
+    raceStatus = "ready";
+    aiDrivers = [];
+    setEngineRunning(false);
+    commitSave();
+    renderScreen();
+    showToast(`${RACE_SERIES[series].label} grid selected.`);
+  });
   document.querySelector<HTMLInputElement>("#import-file")?.addEventListener("change", (event) => {
     const file = (event.currentTarget as HTMLInputElement).files?.[0];
     if (file) void importGarageData(file);
@@ -330,7 +514,7 @@ function handleAction(action: string): void {
       else if (raceStatus === "paused") raceStatus = "running";
       else {
         previewCar = createCar(currentTrack(), save.settings.raceStart === "rolling");
-        aiDrivers = createAIFleet(currentTrack());
+        aiDrivers = createAIFleet(currentTrack(), save.settings.series);
         raceStatus = "running";
       }
       setEngineRunning(raceStatus === "running");
@@ -351,10 +535,32 @@ function handleAction(action: string): void {
         points: [],
         createdAt: new Date().toISOString(),
       };
+      if (mapEnabled && mapCamera) editorTrack.geoReference = createGeoReference(mapCamera);
       renderScreen();
       break;
     case "clear-points":
       if (editorTrack) editorTrack.points = [];
+      renderScreen();
+      break;
+    case "map-search":
+      void searchMapPlaces();
+      break;
+    case "map-mode":
+      if (!mapCamera || !editorTrack?.geoReference) {
+        showToast("Search for a place before enabling the real-world map.", true);
+        break;
+      }
+      mapEnabled = !mapEnabled;
+      renderScreen();
+      break;
+    case "map-zoom-in":
+    case "map-zoom-out":
+      if (!mapCamera) break;
+      mapCamera.zoom = clampZoom(
+        mapCamera.layer,
+        mapCamera.zoom + (action === "map-zoom-in" ? 1 : -1),
+      );
+      if (snapToRoad && mapCamera.zoom < 14) snapToRoad = false;
       renderScreen();
       break;
     case "save-track":
@@ -362,6 +568,9 @@ function handleAction(action: string): void {
       break;
     case "export-save":
       exportSave();
+      break;
+    case "export-track":
+      exportTrack();
       break;
     case "import-save":
       document.querySelector<HTMLInputElement>("#import-file")?.click();
@@ -404,6 +613,25 @@ function exportSave(): void {
   anchor.click();
   URL.revokeObjectURL(url);
   showToast("Garage backup downloaded.");
+}
+
+function exportTrack(): void {
+  if (!editorTrack) return;
+  const nameInput = document.querySelector<HTMLInputElement>("#track-name");
+  if (nameInput) editorTrack.name = nameInput.value.trim();
+  if (!isValidTrack(editorTrack)) {
+    showToast("Add at least 8 valid waypoints before exporting this track.", true);
+    return;
+  }
+  const blob = new Blob([JSON.stringify(editorTrack, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  const safeName = editorTrack.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  anchor.href = url;
+  anchor.download = `${safeName || "apexgrid-track"}.apex`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+  showToast(`${editorTrack.name} downloaded as an .apex track.`);
 }
 
 async function importGarageData(file: File): Promise<void> {
@@ -462,12 +690,12 @@ function escapeHtml(value: string): string {
 
 function draw(): void {
   if (!renderer) return;
-  const track = currentTrack();
+  const track = activeScreen === "workshop" ? editorTrack ?? currentTrack() : currentTrack();
   renderer.draw(
     track,
-    null,
     activeScreen === "workshop" ? editorTrack?.points ?? [] : undefined,
     activeScreen === "race" ? aiDrivers : [],
+    activeScreen === "workshop" && mapEnabled ? mapCamera ?? undefined : undefined,
   );
   updateRaceHud();
 }
@@ -476,7 +704,7 @@ function updateRaceHud(): void {
   const activeCar = raceLeaderCar();
   const speed = document.querySelector<HTMLElement>("#speed-readout");
   if (speed) {
-    const speedValue = activeCar.speed * (save.settings.units === "imperial" ? 0.72 / 1.609 : 0.72);
+    const speedValue = activeCar.speed * (save.settings.units === "imperial" ? 2.23694 : 3.6);
     speed.textContent = Math.round(speedValue).toString().padStart(3, "0");
   }
   const speedUnit = document.querySelector<HTMLElement>("#speed-unit");
@@ -484,7 +712,7 @@ function updateRaceHud(): void {
   const lapTime = document.querySelector<HTMLElement>("#live-lap-time");
   if (lapTime) lapTime.textContent = formatTime(activeCar.lapSeconds);
   const lapNumber = document.querySelector<HTMLElement>("#live-lap-number");
-  if (lapNumber) lapNumber.textContent = `${Math.min(activeCar.lap + 1, 3)} / 3`;
+  if (lapNumber) lapNumber.textContent = `${currentLapNumber(activeCar)} / 3`;
   const progress = document.querySelector<HTMLElement>("#lap-progress");
   if (progress) progress.style.width = `${Math.max(0, Math.min(100, (activeCar.progressIndex / currentTrack().points.length) * 100))}%`;
   const count = document.querySelector<HTMLElement>("#waypoint-count");
@@ -514,7 +742,7 @@ function updateClassification(): void {
   entries.sort((a, b) => b.progress - a.progress);
   const leaderProgress = entries[0]?.progress ?? 0;
   elements.classification.innerHTML = `
-    <div class="classification-head"><span>AUTO GRID</span><b>${entries.length} CARS</b></div>
+    <div class="classification-head"><span>${escapeHtml(RACE_SERIES[save.settings.series].label.toUpperCase())}</span><b>${entries.length} CARS</b></div>
     ${entries.slice(0, 5).map((entry, index) => `
       <div class="classification-row">
         <b class="classification-position">${index + 1}</b><i style="--team-color:#${entry.color.toString(16).padStart(6, "0")}"></i>
@@ -526,7 +754,10 @@ function updateClassification(): void {
 
 function setEngineRunning(running: boolean): void {
   try {
-    engineAudio.setRunning(running, save.settings.engineSound);
+    void engineAudio.setRunning(running, save.settings.engineSound).catch((error: unknown) => {
+      console.error("ApexGrid engine audio could not start.", error);
+      showToast(error instanceof Error ? error.message : "Engine audio is unavailable.", true);
+    });
   } catch (error) {
     console.error("ApexGrid engine audio could not start.", error);
     showToast(error instanceof Error ? error.message : "Engine audio is unavailable.", true);
@@ -557,13 +788,93 @@ await pixi.init({
 elements.mount.appendChild(pixi.canvas);
 pixi.canvas.setAttribute("aria-label", "Top-down circuit map");
 pixi.canvas.addEventListener("pointerdown", (event) => {
-  if (activeScreen !== "workshop" || !editorTrack || !renderer) return;
-  const point: Point = renderer.toWorld(event.clientX, event.clientY);
+  if (event.button !== 0 || activeScreen !== "workshop" || !editorTrack || !renderer) return;
+  const camera = mapEnabled ? mapCamera ?? undefined : undefined;
+  const reference = mapEnabled ? editorTrack.geoReference : undefined;
+  const point: Point = renderer.toWorld(event.clientX, event.clientY, camera, reference);
   if (point.x <= 14 || point.x >= WORLD.width - 14 || point.y <= 14 || point.y >= WORLD.height - 14) return;
-  editorTrack.points.push(point);
-  draw();
+  if (!snapToRoad || !camera || !reference) {
+    editorTrack.points.push(point);
+    draw();
+    return;
+  }
+  if (mapRoutePending) return;
+  mapRoutePending = true;
+  const clickedGeo = trackWorldToGeo(point, {
+    center: { lat: reference.centerLat, lon: reference.centerLon },
+    zoom: reference.zoom,
+    pixelsPerWorldUnit: reference.pixelsPerWorldUnit,
+  });
+  void (async () => {
+    try {
+      const previous = editorTrack?.points.at(-1);
+      const route = previous
+        ? (() => {
+            const previousGeo = trackWorldToGeo(previous, {
+              center: { lat: reference.centerLat, lon: reference.centerLon },
+              zoom: reference.zoom,
+              pixelsPerWorldUnit: reference.pixelsPerWorldUnit,
+            });
+            return geographicDistanceMeters(previousGeo, clickedGeo) > 10_000
+              ? mapRouter.routeLongDistance([previousGeo, clickedGeo])
+              : Promise.resolve(mapRouter.routeBetween(previousGeo, clickedGeo));
+          })()
+        : Promise.resolve([mapRouter.snapPoint(clickedGeo)]);
+      const geoPoints = await route;
+      const worldPoints = geoPoints
+        .map((geo) =>
+          geoToTrackWorld(geo, {
+            center: { lat: reference.centerLat, lon: reference.centerLon },
+            zoom: reference.zoom,
+            pixelsPerWorldUnit: reference.pixelsPerWorldUnit,
+          }),
+        )
+        .filter(
+          (candidate) =>
+            candidate.x > 14 &&
+            candidate.x < WORLD.width - 14 &&
+            candidate.y > 14 &&
+            candidate.y < WORLD.height - 14,
+        );
+      if (previous) worldPoints.shift();
+      if (worldPoints.length === 0) {
+        showToast("That route falls outside the current track area.", true);
+        return;
+      }
+      if (editorTrack) editorTrack.points.push(...worldPoints);
+      draw();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "The road route could not be calculated.", true);
+    } finally {
+      mapRoutePending = false;
+    }
+  })();
 });
-renderer = new TrackRenderer(pixi);
+
+function geographicDistanceMeters(a: GeoPoint, b: GeoPoint): number {
+  const radians = Math.PI / 180;
+  const latitudeA = a.lat * radians;
+  const latitudeB = b.lat * radians;
+  const deltaLatitude = (b.lat - a.lat) * radians;
+  const deltaLongitude = (b.lon - a.lon) * radians;
+  const haversine =
+    Math.sin(deltaLatitude / 2) ** 2 +
+    Math.cos(latitudeA) * Math.cos(latitudeB) * Math.sin(deltaLongitude / 2) ** 2;
+  return 12_742_000 * Math.asin(Math.sqrt(haversine));
+}
+
+function isRaceSeries(value: string): value is RaceSeries {
+  return value === "f1" || value === "f2" || value === "f3" || value === "gt3" || value === "prototype";
+}
+const carTextures = await Promise.all(
+  F1_CAR_SPRITES.map((source) => Assets.load<Texture>(source)),
+);
+renderer = new TrackRenderer(pixi, carTextures, tileProvider, (error) => {
+  console.warn("ApexGrid map tile could not be loaded.", error);
+  if (Date.now() - lastTileErrorToast < 10_000) return;
+  lastTileErrorToast = Date.now();
+  showToast(error.message, true);
+});
 previewCar = createCar(currentTrack());
 renderScreen();
 lastFrame = performance.now();
