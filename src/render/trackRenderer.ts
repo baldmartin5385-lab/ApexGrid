@@ -126,11 +126,12 @@ export class TrackRenderer {
     const definition = VEHICLE_BY_ID.get(driver.vehicleId);
     if (!definition) throw new Error(`Vehicle definition is missing: ${driver.vehicleId}`);
     const targetLength = RACE_SERIES[driver.series].vehicleLength;
+    const visualLength = targetLength * 1.25;
     const shadow = new Graphics()
-      .roundRect(-targetLength * 0.6, -targetLength * 0.31, targetLength * 1.2, targetLength * 0.62, targetLength * 0.22)
+      .roundRect(-visualLength * 0.6, -visualLength * 0.31, visualLength * 1.2, visualLength * 0.62, visualLength * 0.22)
       .fill({ color: 0x080a0b, alpha: 0.42 });
     const focusRing = new Graphics()
-      .circle(0, 0, targetLength * 0.76)
+      .circle(0, 0, visualLength * 0.65)
       .stroke({ color: 0xffd36a, width: 2.5, alpha: 0.9 });
     focusRing.visible = false;
     car.addChild(shadow, focusRing);
@@ -138,13 +139,13 @@ export class TrackRenderer {
     if (texture) {
       const sprite = new Sprite(texture);
       sprite.anchor.set(0.5);
-      sprite.scale.set(targetLength / definition.spriteLengthPixels);
+      sprite.scale.set(visualLength / definition.spriteLengthPixels);
       car.addChild(sprite);
     } else {
       const body = new Graphics()
-        .roundRect(-targetLength * 0.18, -targetLength * 0.5, targetLength * 0.36, targetLength, targetLength * 0.12)
+        .roundRect(-visualLength * 0.18, -visualLength * 0.5, visualLength * 0.36, visualLength, visualLength * 0.12)
         .fill(driver.color)
-        .roundRect(-targetLength * 0.1, -targetLength * 0.12, targetLength * 0.2, targetLength * 0.3, targetLength * 0.06)
+        .roundRect(-visualLength * 0.1, -visualLength * 0.12, visualLength * 0.2, visualLength * 0.3, visualLength * 0.06)
         .fill(0x101419);
       car.addChild(body);
     }

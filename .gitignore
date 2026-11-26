@@ -5,3 +5,4 @@ android/
 *.tsbuildinfo
 .DS_Store
 *.log
+electron/icon.icns

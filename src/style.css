@@ -25,8 +25,9 @@ button { color: inherit; }
 button:focus-visible, input:focus-visible { outline: 2px solid var(--mint); outline-offset: 3px; }
 .app-frame { display: flex; min-height: 100vh; }
 .rail { width: 74px; flex: 0 0 74px; background: #0d1317; border-right: 1px solid #1e282d; display: flex; align-items: center; flex-direction: column; padding: 20px 0 17px; }
-.brand-mark { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid #384449; border-radius: 12px; color: var(--gold); font: 700 16px var(--display); text-decoration: none; letter-spacing: -2px; }
-.brand-mark span { color: #f1f1e9; margin-left: -3px; }
+.brand-mark { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid #384449; border-radius: 12px; color: var(--gold); text-decoration: none; }
+.brand-icon { display: block; width: 100%; height: 100%; border-radius: 11px; object-fit: cover; }
+.brand-mark .brand-copy { display: none; }
 .rail-rule { width: 25px; height: 1px; background: #2a3539; margin: 24px 0 18px; }
 .rail-link { position: relative; display: grid; place-items: center; border: 0; width: 42px; height: 42px; border-radius: 11px; background: transparent; color: #687578; cursor: pointer; margin: 4px 0; transition: background .16s, color .16s; }
 .rail-icon { font-size: 21px; line-height: 1; }
@@ -318,16 +319,11 @@ html[data-theme="modern"] { --gold: #d95748; }
   color: #f3f1ec;
   letter-spacing: 0;
 }
-.brand-monogram {
-  display: grid;
+.brand-icon {
+  flex: none;
   width: 36px;
   height: 36px;
-  place-items: center;
   border-radius: 7px;
-  background: var(--gold);
-  color: #fff;
-  font: 700 14px var(--display);
-  letter-spacing: -.05em;
 }
 .brand-copy {
   display: flex;
@@ -337,8 +333,8 @@ html[data-theme="modern"] { --gold: #d95748; }
   font: 700 14px var(--display);
   letter-spacing: .08em;
 }
+.brand-mark .brand-copy { display: flex; }
 .brand-copy small { color: #878b8e; font: 9px var(--mono); letter-spacing: .13em; }
-.brand-mark span { margin-left: 0; }
 .rail-rule { width: auto; margin: 24px 8px 16px; background: #2a2e31; }
 .rail-link {
   display: flex;

@@ -31,7 +31,7 @@ if (!appRoot) throw new Error("ApexGrid app root is missing.");
 appRoot.innerHTML = `
   <div class="app-frame">
     <aside class="rail" aria-label="Primary navigation">
-      <a class="brand-mark" href="#" aria-label="ApexGrid home"><span class="brand-monogram">AG</span><span class="brand-copy">APEXGRID<small>MOTORSPORT</small></span></a>
+      <a class="brand-mark" href="#" aria-label="ApexGrid home"><img class="brand-icon" src="./icons/icon-192.png" alt="" width="38" height="38" /><span class="brand-copy">APEXGRID<small>MOTORSPORT</small></span></a>
       <div class="rail-rule"></div>
       <button class="rail-link active" data-screen="overview" aria-label="Overview" title="Overview"><span class="rail-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg></span><span class="rail-label">Home</span></button>
       <button class="rail-link" data-screen="race" aria-label="Race weekend" title="Race weekend"><span class="rail-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4m0 1c6-4 8 4 14 0v10c-6 4-8-4-14 0"/></svg></span><span class="rail-label">Race</span></button>

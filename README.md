@@ -4,6 +4,8 @@ ApexGrid is an offline-first motorsport prototype built with TypeScript, PixiJS 
 
 The workshop starts from a blank canvas, a PNG image underlay, or a world map. Zoom with the wheel or controls, drag the empty canvas to pan, and drag individual waypoints to reshape the circuit. Control points form a smooth racing line, and new layouts stay open until **Finish Circuit** is selected. AI drivers brake for corners and attempt passes when they catch a slower car. World-map mode includes place search, OpenStreetMap-based map tiles (street, CARTO dark, Esri imagery, and OpenTopoMap), attribution, and optional local road-graph snapping. Map tiles and the first road-graph download need an internet connection; saved tracks run offline.
 
+The supplied two-car artwork is used for the app icon across the web, desktop, Android, and iOS builds. Run `npm run icons:generate` (Python with Pillow required) after replacing `scripts/assets/apexgrid-app-icon-source.jpg` to regenerate the web and native icon images. Native project setup scripts apply these icons automatically.
+
 ## Requirements
 
 - Node.js 20 or newer
@@ -27,6 +29,7 @@ npm run build
 npm run desktop
 npm run desktop:build
 npm run desktop:build:mac
+npm run icons:generate
 ```
 
 `npm run desktop:build` creates the Windows NSIS installer (`.exe`); `npm run desktop:build:mac` creates an unsigned macOS `.dmg`.

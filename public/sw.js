@@ -1,9 +1,12 @@
-const CACHE_NAME = "apexgrid-shell-v2";
+const CACHE_NAME = "apexgrid-shell-v3";
 const APP_SHELL = [
   "./",
   "./manifest.webmanifest",
+  "./icons/favicon-16.png",
+  "./icons/favicon-32.png",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
+  "./icons/icon-512-maskable.png",
   "./icons/apple-touch-icon.png",
 ];
 

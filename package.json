@@ -9,13 +9,14 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "typecheck": "tsc --noEmit",
+    "icons:generate": "python scripts/generate-app-icons.py",
     "desktop": "npm run build && electron .",
     "desktop:build": "npm run build && electron-builder --win nsis --publish never",
-    "desktop:build:mac": "npm run build && electron-builder --mac dmg --publish never",
-    "mobile:setup": "npm run build && cap add android && node scripts/configure-android-user-agent.cjs",
-    "mobile:sync": "npm run build && cap sync",
+    "desktop:build:mac": "npm run build && node scripts/generate-macos-icon.cjs && electron-builder --mac dmg --publish never",
+    "mobile:setup": "npm run build && cap add android && node scripts/configure-android-user-agent.cjs && node scripts/configure-app-icons.cjs android",
+    "mobile:sync": "npm run build && cap sync && node scripts/configure-app-icons.cjs android",
     "mobile:android": "npm run mobile:sync && cap open android",
-    "mobile:ios:setup": "npm run build && cap add ios && cap sync ios",
+    "mobile:ios:setup": "npm run build && cap add ios && cap sync ios && node scripts/configure-app-icons.cjs ios",
     "mobile:ios": "npm run mobile:ios:setup && cap open ios"
   },
   "dependencies": {
@@ -44,7 +45,12 @@
       "package.json"
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "public/icons/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "electron/icon.icns"
     }
   }
 }

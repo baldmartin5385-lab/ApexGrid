@@ -21,6 +21,7 @@ function createWindow() {
     minHeight: 640,
     backgroundColor: "#0b1014",
     title: "ApexGrid",
+    icon: path.join(__dirname, "..", "dist", "icons", "icon-512.png"),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
